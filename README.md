@@ -119,6 +119,39 @@ bash scripts/ubuntu/train_server_max.sh
 bash scripts/ubuntu/stop_stack.sh
 ```
 
+## Quick start on Ubuntu 24.04 without Docker
+
+If Docker is unavailable on the server, use the native stack:
+
+### 1. Install native runtime dependencies
+
+```bash
+sudo bash scripts/ubuntu/bootstrap_native_ubuntu_24_04.sh
+```
+
+### 2. Start backend + nginx frontend
+
+```bash
+sudo bash scripts/ubuntu/run_native_stack.sh
+```
+
+This brings up:
+
+- web UI: `http://SERVER_IP/`
+- backend docs: `http://SERVER_IP:8000/docs`
+
+### 3. Trigger max-server training
+
+```bash
+bash scripts/ubuntu/train_native_server_max.sh
+```
+
+### 4. Stop the native stack
+
+```bash
+bash scripts/ubuntu/stop_native_stack.sh
+```
+
 ## Docker deployment details
 
 The backend container is configured for high-throughput training:
