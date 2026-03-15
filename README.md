@@ -110,6 +110,8 @@ This brings up:
 bash scripts/ubuntu/train_server_max.sh
 ```
 
+The quick-start training script is GPU-first and launches a single-model `CatBoost` run to keep the server focused on visible GPU utilization instead of long CPU-heavy compare stages.
+
 ### 4. Stop everything
 
 ```bash
@@ -142,6 +144,8 @@ This brings up:
 ```bash
 bash scripts/ubuntu/train_native_server_max.sh
 ```
+
+The native quick-start training script also forces a single-model `CatBoost` run on `server_max` so GPU activity is easier to verify with `nvidia-smi`.
 
 ### 4. Stop the native stack
 

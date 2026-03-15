@@ -30,6 +30,7 @@ curl -sS -X POST "${API_URL}/api/train/start" \
     "task_type": "classification",
     "training_profile": "server_max",
     "model_name": "catboost",
+    "models_to_compare": ["catboost"],
     "save_as_best": true
   }'
 
