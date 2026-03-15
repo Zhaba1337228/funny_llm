@@ -405,7 +405,7 @@ const resolveTrainingPreset = (
     },
     server_max: {
       modelName: 'catboost',
-      modelsToCompare: ['catboost', 'xgboost', 'hist_gradient_boosting', 'extra_trees', 'random_forest', 'torch_mlp'],
+      modelsToCompare: ['catboost', 'xgboost', 'torch_mlp'],
       nEstimators: 1800,
       maxDepth: 12,
       learningRate: 0.025,

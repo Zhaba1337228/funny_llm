@@ -1,7 +1,10 @@
 import type { Data, Layout } from 'plotly.js'
-import Plot from 'react-plotly.js'
+import Plotly from 'plotly.js-dist-min'
+import createPlotlyComponent from 'react-plotly.js/factory'
 
 import { Card } from './Card'
+
+const Plot = createPlotlyComponent(Plotly)
 
 export const PlotPanel = ({
   title,

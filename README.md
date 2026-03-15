@@ -55,7 +55,7 @@ Training profiles:
 
 `server_max` is intended for strong GPU servers and uses:
 
-- larger compare sets
+- GPU-first compare sets
 - deeper boosting defaults
 - larger MLP widths
 - mixed precision
@@ -70,9 +70,6 @@ For server deployments the project is prepared to use:
 
 - `CatBoost` with GPU support
 - `XGBoost` with CUDA device support
-- `HistGradientBoosting`
-- `ExtraTrees`
-- `RandomForest`
 - `PyTorch MLP`
 
 The Docker backend image installs:

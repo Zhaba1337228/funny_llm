@@ -123,7 +123,7 @@ TRAINING_PROFILES: dict[str, dict[str, dict[str, Any]]] = {
     "server_max": {
         "classification": {
             "preferred_model": "catboost",
-            "models_to_compare": ["catboost", "xgboost", "hist_gradient_boosting", "extra_trees", "random_forest", "torch_mlp"],
+            "models_to_compare": ["catboost", "xgboost", "torch_mlp"],
             "hyperparameters": {
                 "iterations": 2200,
                 "n_estimators": 1800,
@@ -149,7 +149,7 @@ TRAINING_PROFILES: dict[str, dict[str, dict[str, Any]]] = {
         },
         "regression": {
             "preferred_model": "catboost",
-            "models_to_compare": ["catboost", "xgboost", "hist_gradient_boosting", "extra_trees", "random_forest", "torch_mlp"],
+            "models_to_compare": ["catboost", "xgboost", "torch_mlp"],
             "hyperparameters": {
                 "iterations": 2200,
                 "n_estimators": 1800,
