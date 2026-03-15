@@ -131,6 +131,7 @@ export interface ModelListResponse {
     target_column: string
     metrics: Record<string, unknown>
     is_active: boolean
+    resumable?: boolean
   }>
   recent_experiments: Array<{
     run_id: string

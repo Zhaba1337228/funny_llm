@@ -33,6 +33,8 @@ export const TrainingLabPage = ({
   const [learningRate, setLearningRate] = useState(0.001)
   const [nEstimators, setNEstimators] = useState(220)
   const [maxDepth, setMaxDepth] = useState(14)
+  const [resumeFromRunId, setResumeFromRunId] = useState('')
+  const [resumeRounds, setResumeRounds] = useState(16)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -62,6 +64,8 @@ export const TrainingLabPage = ({
       setLearningRate(preset.learningRate)
       setEpochs(preset.epochs)
       setBatchSize(preset.batchSize)
+      const resumableVersion = modelCatalog.saved_versions.find((version) => version.resumable && version.task_type === defaultTask)
+      setResumeFromRunId(resumableVersion?.run_id || '')
       setLoading(false)
     }
     void load()
@@ -112,6 +116,8 @@ export const TrainingLabPage = ({
     )
   }
 
+  const resumableVersions = models.saved_versions.filter((version) => version.resumable && version.task_type === taskType)
+
   const startTraining = async () => {
     try {
       setFeedback(null)
@@ -137,6 +143,26 @@ export const TrainingLabPage = ({
         save_as_best: true,
       })
       setFeedback('Training started successfully.')
+    } catch (error) {
+      setFeedback(getApiErrorMessage(error))
+    }
+  }
+
+  const continueTraining = async () => {
+    if (!resumeFromRunId) {
+      setFeedback('Choose a saved run to continue.')
+      return
+    }
+    try {
+      setFeedback(null)
+      await client.startTraining({
+        resume_from_run_id: resumeFromRunId,
+        resume_rounds: resumeRounds,
+        task_type: taskType,
+        training_profile: trainingProfile,
+        save_as_best: true,
+      })
+      setFeedback('Resume training started successfully.')
     } catch (error) {
       setFeedback(getApiErrorMessage(error))
     }
@@ -169,14 +195,25 @@ export const TrainingLabPage = ({
                 Stop
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => void startTraining()}
-                className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
-              >
-                <Play className="h-4 w-4" />
-                Start training
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void continueTraining()}
+                  disabled={!resumeFromRunId}
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Play className="h-4 w-4" />
+                  Continue training
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void startTraining()}
+                  className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
+                >
+                  <Play className="h-4 w-4" />
+                  Start training
+                </button>
+              </div>
             )}
           </div>
         }
@@ -251,6 +288,19 @@ export const TrainingLabPage = ({
             </Control>
             <Control label="Learning rate">
               <input value={learningRate} min={0.0001} max={0.1} step={0.0005} type="number" onChange={(event) => setLearningRate(Number(event.target.value))} className={inputClassName} />
+            </Control>
+            <Control label="Resume from saved run">
+              <select value={resumeFromRunId} onChange={(event) => setResumeFromRunId(event.target.value)} className={inputClassName}>
+                <option value="">Choose saved run</option>
+                {resumableVersions.map((version) => (
+                  <option key={version.run_id} value={version.run_id}>
+                    {version.model_name} - {version.run_id}
+                  </option>
+                ))}
+              </select>
+            </Control>
+            <Control label="Additional epochs / iterations">
+              <input value={resumeRounds} min={1} step={1} type="number" onChange={(event) => setResumeRounds(Number(event.target.value))} className={inputClassName} />
             </Control>
             <Control label="Auto-save best model">
               <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">

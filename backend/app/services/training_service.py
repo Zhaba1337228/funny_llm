@@ -121,6 +121,7 @@ class TrainingService:
                         "target_column": metadata["target_column"],
                         "metrics": metadata["metrics"],
                         "is_active": metadata["run_id"] == active_run_id,
+                        "resumable": metadata["model_name"] in {"catboost", "xgboost", "torch_mlp"},
                     }
                 )
         experiments = []
@@ -136,7 +137,47 @@ class TrainingService:
     def _available_model_names(self, task_type: str) -> list[str]:
         return [entry["name"] for entry in list_model_catalog() if task_type in entry["task_types"]]
 
+    def _load_run_bundle(self, run_id: str) -> dict[str, Any]:
+        run_bundle_path = self.settings.models_dir / "runs" / run_id / "bundle.joblib"
+        if not run_bundle_path.exists():
+            raise FileNotFoundError(f"Model run '{run_id}' was not found.")
+        return joblib.load(run_bundle_path)
+
+    def _resume_supported(self, model_name: str) -> bool:
+        return model_name in {"catboost", "xgboost", "torch_mlp"}
+
     def _prepare_request(self, request: TrainingRequest) -> TrainingRequest:
+        if request.resume_from_run_id:
+            bundle = self._load_run_bundle(request.resume_from_run_id)
+            model_name = bundle["model_name"]
+            if not self._resume_supported(model_name):
+                raise ValueError(f"Resume training is not supported for model '{model_name}'.")
+
+            effective_request = request.model_copy(deep=True)
+            effective_request.task_type = bundle["task_type"]
+            effective_request.model_name = model_name
+            effective_request.target_column = bundle["target_column"]
+            effective_request.feature_columns = bundle["feature_columns"]
+            effective_request.models_to_compare = [model_name]
+            effective_request.training_profile = bundle.get("training_profile", effective_request.training_profile)
+            if not effective_request.hyperparameters:
+                effective_request.hyperparameters = dict(bundle.get("hyperparameters", {}))
+            else:
+                effective_request.hyperparameters = {**bundle.get("hyperparameters", {}), **effective_request.hyperparameters}
+            if not effective_request.neural_net:
+                effective_request.neural_net = dict(bundle.get("neural_net", {}))
+            else:
+                effective_request.neural_net = {**bundle.get("neural_net", {}), **effective_request.neural_net}
+
+            if effective_request.resume_rounds:
+                if model_name == "torch_mlp":
+                    effective_request.neural_net["epochs"] = int(effective_request.resume_rounds)
+                elif model_name == "catboost":
+                    effective_request.hyperparameters["iterations"] = int(effective_request.resume_rounds)
+                elif model_name == "xgboost":
+                    effective_request.hyperparameters["n_estimators"] = int(effective_request.resume_rounds)
+            return effective_request
+
         available_models = self._available_model_names(request.task_type)
         effective_request = apply_training_profile(
             request=request,
@@ -388,27 +429,63 @@ class TrainingService:
         request: TrainingRequest,
         numeric_features: list[str],
         categorical_features: list[str],
+        resume_bundle: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        preprocessor = build_preprocessor(numeric_features, categorical_features)
-        estimator = build_sklearn_model(
-            model_name,
-            task_type,
-            request.random_seed,
-            request.hyperparameters,
-            prefer_gpu=self._gpu_count > 0,
-            gpu_count=self._gpu_count,
-            cpu_threads=self.settings.max_cpu_workers,
-        )
-        pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("model", estimator)])
         started = time.perf_counter()
-        pipeline.fit(train_x, train_y)
-        duration = round(time.perf_counter() - started, 2)
-        if task_type == "classification":
-            probabilities = pipeline.predict_proba(val_x)[:, 1]
-            metrics = self._classification_metrics(val_y.to_numpy(), probabilities)
+
+        if resume_bundle:
+            previous_pipeline = resume_bundle["model_object"]
+            preprocessor = previous_pipeline.named_steps["preprocessor"]
+            previous_estimator = previous_pipeline.named_steps["model"]
+            estimator = build_sklearn_model(
+                model_name,
+                task_type,
+                request.random_seed,
+                request.hyperparameters,
+                prefer_gpu=self._gpu_count > 0,
+                gpu_count=self._gpu_count,
+                cpu_threads=self.settings.max_cpu_workers,
+            )
+            transformed_train = np.asarray(preprocessor.transform(train_x))
+            transformed_val = np.asarray(preprocessor.transform(val_x))
+
+            fit_kwargs: dict[str, Any] = {}
+            if model_name == "xgboost" and hasattr(previous_estimator, "get_booster"):
+                fit_kwargs["xgb_model"] = previous_estimator.get_booster()
+            elif model_name == "catboost":
+                fit_kwargs["init_model"] = previous_estimator
+            else:
+                raise ValueError(f"Resume training is not supported for model '{model_name}'.")
+
+            estimator.fit(transformed_train, train_y, **fit_kwargs)
+            pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("model", estimator)])
+            if task_type == "classification":
+                probabilities = estimator.predict_proba(transformed_val)[:, 1]
+                metrics = self._classification_metrics(val_y.to_numpy(), probabilities)
+            else:
+                predictions = estimator.predict(transformed_val)
+                metrics = self._regression_metrics(val_y.to_numpy(), predictions)
         else:
-            predictions = pipeline.predict(val_x)
-            metrics = self._regression_metrics(val_y.to_numpy(), predictions)
+            preprocessor = build_preprocessor(numeric_features, categorical_features)
+            estimator = build_sklearn_model(
+                model_name,
+                task_type,
+                request.random_seed,
+                request.hyperparameters,
+                prefer_gpu=self._gpu_count > 0,
+                gpu_count=self._gpu_count,
+                cpu_threads=self.settings.max_cpu_workers,
+            )
+            pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("model", estimator)])
+            pipeline.fit(train_x, train_y)
+            if task_type == "classification":
+                probabilities = pipeline.predict_proba(val_x)[:, 1]
+                metrics = self._classification_metrics(val_y.to_numpy(), probabilities)
+            else:
+                predictions = pipeline.predict(val_x)
+                metrics = self._regression_metrics(val_y.to_numpy(), predictions)
+
+        duration = round(time.perf_counter() - started, 2)
         return {
             "artifact_type": "sklearn",
             "model_object": pipeline,
@@ -428,13 +505,33 @@ class TrainingService:
         request: TrainingRequest,
         numeric_features: list[str],
         categorical_features: list[str],
+        resume_bundle: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        preprocessor = build_preprocessor(numeric_features, categorical_features)
-        transformed_train = preprocessor.fit_transform(train_x)
-        transformed_val = preprocessor.transform(val_x)
-
         neural_defaults = get_descriptor("torch_mlp").default_params
-        neural_config = {**neural_defaults, **request.neural_net, **request.hyperparameters}
+        previous_history: dict[str, list[float]] = {}
+        initial_state: dict | None = None
+
+        if resume_bundle:
+            model_config = resume_bundle["model_object"]
+            preprocessor = model_config["preprocessor"]
+            transformed_train = preprocessor.transform(train_x)
+            transformed_val = preprocessor.transform(val_x)
+            neural_config = {
+                **neural_defaults,
+                "hidden_dims": model_config["hidden_dims"],
+                "dropout": model_config["dropout"],
+                **resume_bundle.get("neural_net", {}),
+                **request.neural_net,
+                **request.hyperparameters,
+            }
+            previous_history = {key: list(value) for key, value in resume_bundle.get("history", {}).items()}
+            initial_state = model_config["state_dict"]
+        else:
+            preprocessor = build_preprocessor(numeric_features, categorical_features)
+            transformed_train = preprocessor.fit_transform(train_x)
+            transformed_val = preprocessor.transform(val_x)
+            neural_config = {**neural_defaults, **request.neural_net, **request.hyperparameters}
+
         predictor = TorchTabularPredictor(
             task_type=task_type,
             input_dim=int(transformed_train.shape[1]),
@@ -442,6 +539,8 @@ class TrainingService:
             dropout=float(neural_config.get("dropout", neural_defaults["dropout"])),
             runtime_config=self._torch_runtime_config(),
         )
+        if initial_state is not None:
+            predictor.load_state(initial_state)
         self._set_status(device=predictor.device_label)
 
         def progress_callback(epoch: int, total_epochs: int, metrics: dict[str, Any]) -> None:
@@ -486,7 +585,10 @@ class TrainingService:
                 "inference_device": predictor.device,
             },
             "metrics": metrics,
-            "history": fit_result.history,
+            "history": {
+                key: [*previous_history.get(key, []), *fit_result.history.get(key, [])]
+                for key in set(previous_history) | set(fit_result.history)
+            },
             "training_time_seconds": duration,
             "device": fit_result.device,
         }
@@ -636,10 +738,13 @@ class TrainingService:
             effective_request = self._prepare_request(request)
             dataframe = self.dataset_service.load_dataframe()
             feature_columns, target_column = self._resolve_columns(effective_request, dataframe)
+            resume_bundle = self._load_run_bundle(effective_request.resume_from_run_id) if effective_request.resume_from_run_id else None
             self._append_log(
                 f"Dataset loaded with {len(dataframe):,} candidates, target '{target_column}', "
                 f"profile '{effective_request.training_profile}', GPUs={self._gpu_count}, CPU workers={self.settings.max_cpu_workers}."
             )
+            if resume_bundle:
+                self._append_log(f"Resuming from run '{resume_bundle['run_id']}' using model '{resume_bundle['model_name']}'.")
             self._set_status(progress=0.08, current_step="Preparing train/validation/test split")
 
             work_frame = dataframe[feature_columns + [target_column]].dropna(subset=[target_column]).copy()
@@ -679,6 +784,7 @@ class TrainingService:
                         request=effective_request,
                         numeric_features=numeric_features,
                         categorical_features=categorical_features,
+                        resume_bundle=resume_bundle if resume_bundle and model_name == resume_bundle["model_name"] else None,
                     )
                 else:
                     outcome = self._train_sklearn_model(
@@ -691,6 +797,7 @@ class TrainingService:
                         request=effective_request,
                         numeric_features=numeric_features,
                         categorical_features=categorical_features,
+                        resume_bundle=resume_bundle if resume_bundle and model_name == resume_bundle["model_name"] else None,
                     )
 
                 if self._stop_event.is_set():
@@ -770,6 +877,9 @@ class TrainingService:
                     "device": outcome["device"],
                     "model_object": outcome["model_object"],
                     "comparison": [],
+                    "hyperparameters": effective_request.hyperparameters,
+                    "neural_net": effective_request.neural_net,
+                    "resumed_from_run_id": resume_bundle["run_id"] if resume_bundle else None,
                 }
                 trained_bundles[model_name] = trained_bundle
 

@@ -28,6 +28,8 @@ class TrainingRequest(BaseModel):
     task_type: TaskType = "classification"
     training_profile: TrainingProfile = "balanced"
     model_name: str = "random_forest"
+    resume_from_run_id: str | None = None
+    resume_rounds: int | None = None
     target_column: str | None = None
     feature_columns: list[str] | None = None
     models_to_compare: list[str] | None = None
