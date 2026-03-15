@@ -296,17 +296,28 @@ class TrainingService:
         feature_columns: list[str],
     ) -> list[dict[str, Any]]:
         if artifact_type == "sklearn":
-            scoring = "f1" if task_type == "classification" else "r2"
-            result = permutation_importance(
-                model_object,
-                sample_x,
-                sample_y,
-                n_repeats=4,
-                random_state=self.settings.random_seed,
-                n_jobs=self.settings.max_cpu_workers,
-                scoring=scoring,
-            )
-            importances = result.importances_mean
+            estimator = model_object.named_steps.get("model") if isinstance(model_object, Pipeline) else model_object
+            native_importances = None
+            if estimator is not None and hasattr(estimator, "feature_importances_"):
+                native_importances = np.asarray(getattr(estimator, "feature_importances_"), dtype=float)
+            elif estimator is not None and hasattr(estimator, "coef_"):
+                coefficients = np.asarray(getattr(estimator, "coef_"), dtype=float)
+                native_importances = np.abs(coefficients).mean(axis=0) if coefficients.ndim > 1 else np.abs(coefficients)
+
+            if native_importances is not None and native_importances.size > 0:
+                importances = native_importances[: len(feature_columns)]
+            else:
+                scoring = "f1" if task_type == "classification" else "r2"
+                result = permutation_importance(
+                    model_object,
+                    sample_x,
+                    sample_y,
+                    n_repeats=2,
+                    random_state=self.settings.random_seed,
+                    n_jobs=max(min(self.settings.max_cpu_workers // 2, 12), 1),
+                    scoring=scoring,
+                )
+                importances = result.importances_mean
         else:
             correlations = []
             sample_frame = sample_x.copy()
@@ -698,6 +709,11 @@ class TrainingService:
                             },
                             test_x,
                         )
+                    self._set_status(
+                        current_step=f"Evaluating {descriptor.label}",
+                        active_model_name=model_name,
+                        progress=0.36 + ((index - 1) / max(len(models_to_compare), 1)) * 0.18,
+                    )
                     test_metrics = self._classification_metrics(test_y.to_numpy(), np.asarray(test_values))
                 else:
                     if outcome["artifact_type"] == "sklearn":
@@ -712,11 +728,22 @@ class TrainingService:
                             },
                             test_x,
                         )
+                    self._set_status(
+                        current_step=f"Evaluating {descriptor.label}",
+                        active_model_name=model_name,
+                        progress=0.36 + ((index - 1) / max(len(models_to_compare), 1)) * 0.18,
+                    )
                     test_metrics = self._regression_metrics(test_y.to_numpy(), np.asarray(test_values))
 
                 sample_count = min(self.settings.ranking_sample_size, len(test_x))
                 sample_x = test_x.iloc[:sample_count]
                 sample_y = test_y.iloc[:sample_count]
+                self._set_status(
+                    current_step=f"Computing feature importance for {descriptor.label}",
+                    active_model_name=model_name,
+                    progress=0.46 + ((index - 1) / max(len(models_to_compare), 1)) * 0.18,
+                )
+                self._append_log(f"Computing feature importance for {descriptor.label}.")
                 feature_importance = self._compute_feature_importance(
                     artifact_type=outcome["artifact_type"],
                     model_object=outcome["model_object"],
@@ -776,6 +803,7 @@ class TrainingService:
             bundle = trained_bundles[active_name]
             bundle["comparison"] = results_table
 
+            self._append_log(f"Best model selected: {bundle['model_name']} on {bundle['device']}.")
             self._set_status(progress=0.9, current_step="Building full candidate ranking cache", device=bundle["device"])
             prediction_cache = self._build_prediction_cache(bundle)
             bundle["prediction_cache"] = prediction_cache
