@@ -1,0 +1,9 @@
+.git
+.venv
+__pycache__
+*.pyc
+frontend/node_modules
+frontend/dist
+models/runs
+models/latest
+data/__pycache__

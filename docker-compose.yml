@@ -1,0 +1,44 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    gpus: all
+    ipc: host
+    shm_size: "16gb"
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ports:
+      - "8000:8000"
+    environment:
+      DATASET_SLUG: ${DATASET_SLUG:-rhythmghai/resume-screening-dataset-200k-candidates}
+      LOCAL_DATASET_PATH: ${LOCAL_DATASET_PATH:-}
+      DEFAULT_TRAINING_PROFILE: ${DEFAULT_TRAINING_PROFILE:-server_max}
+      MAX_CPU_WORKERS: ${MAX_CPU_WORKERS:-38}
+      TORCH_DATA_LOADER_WORKERS: ${TORCH_DATA_LOADER_WORKERS:-16}
+      TORCH_PREFETCH_FACTOR: ${TORCH_PREFETCH_FACTOR:-4}
+      TORCH_PIN_MEMORY: ${TORCH_PIN_MEMORY:-true}
+      TORCH_PERSISTENT_WORKERS: ${TORCH_PERSISTENT_WORKERS:-true}
+      TORCH_COMPILE_ENABLED: ${TORCH_COMPILE_ENABLED:-true}
+      TORCH_AMP_ENABLED: ${TORCH_AMP_ENABLED:-true}
+      TORCH_ALLOW_TF32: ${TORCH_ALLOW_TF32:-true}
+      TORCH_USE_DATA_PARALLEL: ${TORCH_USE_DATA_PARALLEL:-true}
+      TORCH_EVAL_BATCH_SIZE: ${TORCH_EVAL_BATCH_SIZE:-131072}
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-38}
+      MKL_NUM_THREADS: ${MKL_NUM_THREADS:-38}
+      NUMEXPR_MAX_THREADS: ${NUMEXPR_MAX_THREADS:-38}
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
