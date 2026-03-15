@@ -70,10 +70,8 @@ export const useTrainingStatusStream = () => {
     connect()
 
     const fallbackPoll = window.setInterval(() => {
-      if (!streamConnectedRef.current) {
-        void fetchSnapshot()
-      }
-    }, 5000)
+      void fetchSnapshot()
+    }, 2500)
 
     return () => {
       cancelled = true

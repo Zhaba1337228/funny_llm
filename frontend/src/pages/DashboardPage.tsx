@@ -21,23 +21,41 @@ export const DashboardPage = ({
   const [results, setResults] = useState<TrainingResults | null>(null)
   const [ranking, setRanking] = useState<RankingResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
     const load = async () => {
       try {
-        setLoading(true)
-        const [dataset, edaSummary, topCandidates] = await Promise.all([
+        if (!datasetInfo || !eda) {
+          setLoading(true)
+        }
+        setLoadError(null)
+        const [datasetResult, edaResult, topCandidatesResult, trainingResult] = await Promise.allSettled([
           client.datasetInfo(),
           client.edaSummary(),
-          client.topCandidates({ limit: 8 }).catch(() => null),
+          client.topCandidates({ limit: 8 }),
+          client.trainingResults(),
         ])
-        const training = await client.trainingResults().catch(() => null)
         if (!mounted) return
-        setDatasetInfo(dataset)
-        setEda(edaSummary)
-        setRanking(topCandidates)
-        setResults(training)
+        if (datasetResult.status === 'fulfilled') {
+          setDatasetInfo(datasetResult.value)
+        }
+        if (edaResult.status === 'fulfilled') {
+          setEda(edaResult.value)
+        }
+        if (topCandidatesResult.status === 'fulfilled') {
+          setRanking(topCandidatesResult.value)
+        }
+        if (trainingResult.status === 'fulfilled') {
+          setResults(trainingResult.value)
+        } else {
+          setResults(null)
+        }
+
+        if (datasetResult.status === 'rejected' && edaResult.status === 'rejected' && !datasetInfo && !eda) {
+          setLoadError('Dashboard data is temporarily unavailable. Backend may still be warming up.')
+        }
       } finally {
         if (mounted) {
           setLoading(false)
@@ -52,6 +70,10 @@ export const DashboardPage = ({
 
   if (loading) {
     return <LoadingState label="Compiling dashboard overview..." />
+  }
+
+  if (loadError && !datasetInfo && !eda) {
+    return <EmptyState title="Dashboard warming up" description={loadError} />
   }
 
   if (!datasetInfo || !eda) {

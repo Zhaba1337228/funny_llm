@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
+import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { AppShell } from './components/AppShell'
 import { LoadingState } from './components/LoadingState'
 import { useTrainingStatusStream } from './hooks/useTrainingStatusStream'
@@ -42,18 +43,20 @@ function App() {
         deviceInfo={deviceInfo}
         streamConnected={streamConnected}
       >
-        <Suspense fallback={<LoadingState label="Loading workspace..." />}>
-          <Routes>
-            <Route path="/" element={<DashboardPage trainingStatus={trainingStatus} deviceInfo={deviceInfo} />} />
-            <Route path="/dataset" element={<DatasetPage />} />
-            <Route path="/training" element={<TrainingLabPage trainingStatus={trainingStatus} deviceInfo={deviceInfo} />} />
-            <Route path="/performance" element={<PerformancePage />} />
-            <Route path="/ranking" element={<RankingPage />} />
-            <Route path="/candidate/:candidateId" element={<CandidateDetailPage />} />
-            <Route path="/playground" element={<PlaygroundPage />} />
-            <Route path="/compare" element={<ComparePage />} />
-          </Routes>
-        </Suspense>
+        <AppErrorBoundary>
+          <Suspense fallback={<LoadingState label="Loading workspace..." />}>
+            <Routes>
+              <Route path="/" element={<DashboardPage trainingStatus={trainingStatus} deviceInfo={deviceInfo} />} />
+              <Route path="/dataset" element={<DatasetPage />} />
+              <Route path="/training" element={<TrainingLabPage trainingStatus={trainingStatus} deviceInfo={deviceInfo} />} />
+              <Route path="/performance" element={<PerformancePage />} />
+              <Route path="/ranking" element={<RankingPage />} />
+              <Route path="/candidate/:candidateId" element={<CandidateDetailPage />} />
+              <Route path="/playground" element={<PlaygroundPage />} />
+              <Route path="/compare" element={<ComparePage />} />
+            </Routes>
+          </Suspense>
+        </AppErrorBoundary>
       </AppShell>
     </BrowserRouter>
   )
