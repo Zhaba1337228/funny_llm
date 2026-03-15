@@ -35,7 +35,7 @@ PY
 
 RUN python3 -m pip install --upgrade pip setuptools wheel && \
     python3 -m pip install -r /tmp/requirements.docker.txt && \
-    python3 -m pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision torchaudio
+    python3 -m pip install --index-url https://download.pytorch.org/whl/cu128 torch
 
 COPY backend /app/backend
 COPY data /app/data

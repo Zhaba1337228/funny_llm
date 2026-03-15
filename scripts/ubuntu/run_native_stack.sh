@@ -49,7 +49,7 @@ fi
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r requirements.server.txt
-python -m pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision torchaudio
+python -m pip install --index-url https://download.pytorch.org/whl/cu128 torch
 
 pushd frontend >/dev/null
 npm ci

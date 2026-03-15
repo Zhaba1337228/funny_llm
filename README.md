@@ -79,7 +79,7 @@ The Docker backend image installs:
 
 - `catboost`
 - `xgboost`
-- CUDA-enabled PyTorch from the official `cu128` wheels
+- CUDA-enabled `torch` from the official `cu128` wheels
 
 ## Why the Docker image uses CUDA 12.8
 
