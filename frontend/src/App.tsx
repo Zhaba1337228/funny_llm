@@ -3,9 +3,9 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
 import { AppShell } from './components/AppShell'
 import { LoadingState } from './components/LoadingState'
-import { usePolling } from './hooks/usePolling'
+import { useTrainingStatusStream } from './hooks/useTrainingStatusStream'
 import { client } from './lib/api'
-import type { DeviceInfo, TrainingStatus } from './types/api'
+import type { DeviceInfo } from './types/api'
 
 const DashboardPage = lazy(async () => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
 const DatasetPage = lazy(async () => import('./pages/DatasetPage').then((module) => ({ default: module.DatasetPage })))
@@ -21,8 +21,8 @@ function App() {
     const stored = window.localStorage.getItem('resume-ai-theme')
     return stored === 'light' ? 'light' : 'dark'
   })
-  const [trainingStatus, setTrainingStatus] = useState<TrainingStatus | null>(null)
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null)
+  const { trainingStatus, streamConnected } = useTrainingStatusStream()
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
@@ -33,17 +33,6 @@ function App() {
     void client.deviceInfo().then(setDeviceInfo).catch(() => null)
   }, [])
 
-  usePolling(
-    async () => {
-      const status = await client.trainingStatus().catch(() => null)
-      if (status) {
-        setTrainingStatus(status)
-      }
-    },
-    2500,
-    true,
-  )
-
   return (
     <BrowserRouter>
       <AppShell
@@ -51,6 +40,7 @@ function App() {
         onToggleTheme={() => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))}
         trainingStatus={trainingStatus}
         deviceInfo={deviceInfo}
+        streamConnected={streamConnected}
       >
         <Suspense fallback={<LoadingState label="Loading workspace..." />}>
           <Routes>

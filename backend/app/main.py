@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Query
+import asyncio
+
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -88,6 +90,26 @@ def train_stop() -> dict:
 @app.get("/api/train/status")
 def train_status() -> dict:
     return training_service.get_status()
+
+
+@app.websocket("/api/ws/training-status")
+async def train_status_ws(websocket: WebSocket) -> None:
+    await websocket.accept()
+    last_payload: dict | None = None
+    try:
+        while True:
+            payload = training_service.get_status()
+            if payload != last_payload:
+                await websocket.send_json(payload)
+                last_payload = payload
+            await asyncio.sleep(1.0)
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 @app.get("/api/train/results")

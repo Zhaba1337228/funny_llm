@@ -37,12 +37,14 @@ export const AppShell = ({
   onToggleTheme,
   trainingStatus,
   deviceInfo,
+  streamConnected,
 }: {
   children: ReactNode
   theme: 'dark' | 'light'
   onToggleTheme: () => void
   trainingStatus: TrainingStatus | null
   deviceInfo: DeviceInfo | null
+  streamConnected: boolean
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
@@ -94,6 +96,10 @@ export const AppShell = ({
               <div>Updated: {formatDateTime(trainingStatus?.finished_at || trainingStatus?.started_at)}</div>
               <div>Device: {deviceInfo?.gpu_name || deviceInfo?.preferred_training_device || '-'}</div>
               <div>VRAM: {deviceInfo?.total_gpu_memory_gb ? `${deviceInfo.total_gpu_memory_gb} GB` : '-'}</div>
+              <div className="flex items-center gap-2">
+                Stream:
+                <StatusBadge label={streamConnected ? 'live' : 'reconnect'} tone={streamConnected ? 'emerald' : 'amber'} />
+              </div>
             </div>
           </div>
 
