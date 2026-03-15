@@ -70,6 +70,38 @@ export const DashboardPage = ({
         action={<StatusBadge label={trainingStatus?.status || 'idle'} tone={trainingStatus?.status === 'trained' ? 'emerald' : trainingStatus?.status === 'training' ? 'cyan' : 'slate'} />}
       />
 
+      {trainingStatus?.status === 'training' && (
+        <Card
+          title="Live training stream"
+          description="Watch the active run in real time while metrics, ranking, and artifacts are still being produced."
+          className="border-cyan-400/20 bg-cyan-500/10"
+        >
+          <div className="space-y-4">
+            <div className="h-3 overflow-hidden rounded-full bg-slate-950/50">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-300 to-emerald-400 transition-all"
+                style={{ width: `${Math.max((trainingStatus.progress || 0) * 100, 6)}%` }}
+              />
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <LiveInfo label="Current step" value={trainingStatus.current_step || 'Preparing run'} />
+              <LiveInfo label="Active model" value={trainingStatus.active_model_name || 'Initializing'} />
+              <LiveInfo label="Elapsed" value={trainingStatus.elapsed_seconds ? `${trainingStatus.elapsed_seconds}s` : '-'} />
+              <LiveInfo label="Device" value={trainingStatus.device || deviceInfo?.gpu_name || deviceInfo?.preferred_training_device || 'auto'} />
+            </div>
+
+            <div className="max-h-[220px] space-y-2 overflow-auto rounded-[1.25rem] border border-white/10 bg-slate-950/40 p-4 font-mono text-xs text-slate-200">
+              {(trainingStatus.logs || []).length > 0 ? (
+                trainingStatus.logs.slice(-12).map((log) => <div key={log}>{log}</div>)
+              ) : (
+                <div>No live logs yet. The backend is still preparing the training job.</div>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card title="Candidates" description="Rows currently available for analysis">
           <div className="font-display text-3xl font-semibold text-white">{formatNumber(datasetInfo.overview.candidate_count)}</div>
@@ -188,5 +220,12 @@ const MetricTile = ({ label, value }: { label: string; value: string }) => (
   <div className="rounded-[1.25rem] border border-white/10 bg-white/5 p-4">
     <div className="text-xs uppercase tracking-[0.22em] text-slate-400">{label}</div>
     <div className="mt-3 font-display text-2xl font-semibold text-white">{value}</div>
+  </div>
+)
+
+const LiveInfo = ({ label, value }: { label: string; value: string }) => (
+  <div className="rounded-[1.25rem] border border-white/10 bg-white/5 p-4">
+    <div className="text-xs uppercase tracking-[0.22em] text-slate-400">{label}</div>
+    <div className="mt-2 text-sm text-white">{value}</div>
   </div>
 )
